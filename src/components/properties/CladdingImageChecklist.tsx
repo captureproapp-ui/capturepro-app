@@ -3,6 +3,7 @@ import { supabase, Property } from '../../lib/supabase';
 import { ArrowLeft, Upload, CheckCircle, AlertCircle, Camera, X, Trash2, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 import { LocationBadge } from '../ui/LocationBadge';
 import { convertImageIfNeeded } from '../../utils/imageConversion';
+import { extractEXIFData, getBrowserLocation } from '../../utils/geolocation';
 
 type CladdingImageChecklistProps = {
   propertyId: string;
@@ -277,6 +278,15 @@ export function CladdingImageChecklist({
       }
 
       try {
+        let browserLocation = null;
+        try {
+          browserLocation = await getBrowserLocation();
+        } catch (error) {
+          console.warn('Could not get browser location:', error);
+        }
+
+        const exifData = await extractEXIFData(file);
+
         const conversionResult = await convertImageIfNeeded(file);
         const processedFile = conversionResult.file;
 
@@ -302,7 +312,10 @@ export function CladdingImageChecklist({
           photo_type: photoType,
           file_url: urlData.publicUrl,
           file_name: processedFile.name,
-          captured_at: new Date().toISOString(),
+          gps_lat: exifData.gps_lat || browserLocation?.gps_lat || null,
+          gps_lng: exifData.gps_lng || browserLocation?.gps_lng || null,
+          gps_accuracy: browserLocation?.gps_accuracy || null,
+          captured_at: exifData.capturedAt,
           uploaded_at: new Date().toISOString(),
         });
 

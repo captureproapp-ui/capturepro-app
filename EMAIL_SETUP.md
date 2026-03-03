@@ -18,10 +18,10 @@ When an admin invites a user, the system:
 ### Example Flow
 
 ```
-1. Admin invites: gary.peats@yahoo.com
-2. System creates user with ID: 5019261a-dd86-4775-ad3a-6986bdde1b9b
-3. Invitation link: https://capturepro.work/accept-invite?token=5019261a-dd86-4775-ad3a-6986bdde1b9b
-4. Email sent to gary.peats@yahoo.com
+1. Admin invites: user@example.com
+2. System creates user with ID: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+3. Invitation link: https://capturepro.work/accept-invite?token=a1b2c3d4-e5f6-7890-abcd-ef1234567890
+4. Email sent to user@example.com
 5. User clicks link → Sets password → Account activated
 ```
 

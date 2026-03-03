@@ -310,7 +310,6 @@ export default function OrganisationDetailModal({ organisation, onClose, onRefre
                       <div className="flex items-center gap-3">
                         <div className="text-right">
                           <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
-                            user.role === 'owner' ? 'bg-purple-100 text-purple-800' :
                             user.role === 'admin' ? 'bg-blue-100 text-blue-800' :
                             'bg-gray-100 text-gray-800'
                           }`}>

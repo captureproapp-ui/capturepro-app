@@ -31,7 +31,7 @@ export function isSupabaseConfigured(): boolean {
   return envStatus.hasSupabase && supabase !== null;
 }
 
-export type UserRole = 'owner' | 'admin' | 'installer';
+export type UserRole = 'admin' | 'installer';
 
 export type Profile = {
   id: string;

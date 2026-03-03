@@ -72,7 +72,7 @@ export function PropertyDetail({
   const [propertyMeasures, setPropertyMeasures] = useState<PropertyMeasure[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const isAdmin = profile?.role === 'admin' || profile?.role === 'owner';
+  const isAdmin = profile?.role === 'admin';
 
   useEffect(() => {
     if (refreshTrigger !== undefined) {

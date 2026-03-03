@@ -113,18 +113,13 @@ export function WelcomePage() {
 
         if (!supabaseUrl || !anonKey) throw new Error("App configuration error");
 
-        const [sessionRes, measuresRes] = await Promise.all([
-          fetch(`${supabaseUrl}/functions/v1/complete-registration?sessionId=${encodeURIComponent(sessionId)}`, {
-            method: "GET",
-            headers: {
-              Authorization: `Bearer ${anonKey}`,
-              apikey: anonKey,
-            },
-          }),
-          supabase
-            ? supabase.from("measure_types").select("id, name, code, description, icon_name, color_class").eq("is_active", true).order("name")
-            : Promise.resolve({ data: [], error: null }),
-        ]);
+        const sessionRes = await fetch(`${supabaseUrl}/functions/v1/complete-registration?sessionId=${encodeURIComponent(sessionId)}`, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${anonKey}`,
+            apikey: anonKey,
+          },
+        });
 
         if (!sessionRes.ok) {
           const text = await sessionRes.text();
@@ -137,10 +132,7 @@ export function WelcomePage() {
         if (!mounted) return;
         setEmail(sessionData.email || "");
         setOrganisationName(sessionData.organisationName || "");
-
-        if ("data" in measuresRes) {
-          setMeasures(measuresRes.data || []);
-        }
+        setMeasures(sessionData.measures || []);
       } catch (e: any) {
         if (!mounted) return;
         const msg = e?.message ?? "";

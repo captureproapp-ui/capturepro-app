@@ -113,13 +113,20 @@ Deno.serve(async (req) => {
     // GET → Prefill Data
     // ============================
     if (req.method === "GET") {
+      const { data: measures } = await supabaseAdmin
+        .from("measure_types")
+        .select("id, name, code, description, icon_name, color_class")
+        .eq("is_active", true)
+        .order("name")
+
       return new Response(
         JSON.stringify({
           email,
-          organisationName,
+          organisationName: metaOrgName,
           fullName,
           seatLimit,
           measureTypeId,
+          measures: measures || [],
         }),
         { status: 200, headers: corsHeaders }
       )
@@ -242,7 +249,7 @@ Deno.serve(async (req) => {
         id: createdUser.user.id,
         email,
         full_name: fullName,
-        role: "owner",
+        role: "admin",
         organisation_id: organisation.id,
         is_active: true,
       })

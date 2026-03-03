@@ -112,7 +112,7 @@ export function ProfileSettings() {
     );
   }
 
-  const showOrgTab = profile.role === 'admin' || profile.role === 'owner';
+  const showOrgTab = profile.role === 'admin';
 
   return (
     <div className="space-y-6">

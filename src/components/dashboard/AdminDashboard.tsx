@@ -2,14 +2,35 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase, Property, Profile } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { FolderOpen, Users, Clock, CheckCircle, TrendingUp, HelpCircle, CreditCard, AlertCircle } from 'lucide-react';
+import { FolderOpen, Users, Clock, CheckCircle, TrendingUp, HelpCircle, CreditCard, AlertCircle, Layers, Square } from 'lucide-react';
 import { SubscriptionModal } from '../support/SubscriptionModal';
+
+interface OrganisationMeasure {
+  id: string;
+  is_primary: boolean;
+  created_at: string;
+  measure_types: {
+    id: string;
+    name: string;
+    code: string;
+    description: string;
+    icon_name: string;
+    color_class: string;
+  };
+}
+
+const iconMap: Record<string, React.ElementType> = {
+  flame: TrendingUp,
+  layers: Layers,
+  square: Square,
+};
 
 export function AdminDashboard() {
   const { profile } = useAuth();
   const navigate = useNavigate();
   const [properties, setProperties] = useState<Property[]>([]);
   const [installers, setInstallers] = useState<Profile[]>([]);
+  const [measures, setMeasures] = useState<OrganisationMeasure[]>([]);
   const [loading, setLoading] = useState(true);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
 
@@ -25,7 +46,7 @@ export function AdminDashboard() {
       }, 10000);
 
       try {
-        const [propertiesResult, installersResult] = await Promise.all([
+        const [propertiesResult, installersResult, measuresResult] = await Promise.all([
           supabase
             .from('properties')
             .select('*')
@@ -39,6 +60,12 @@ export function AdminDashboard() {
             .eq('role', 'installer')
             .order('is_active', { ascending: false })
             .order('full_name'),
+          supabase
+            .from('organisation_measures')
+            .select('id, is_primary, created_at, measure_types:measure_type_id(id, name, code, description, icon_name, color_class)')
+            .eq('organisation_id', profile.organisation_id)
+            .order('is_primary', { ascending: false })
+            .order('created_at'),
         ]);
 
         clearTimeout(timeoutId);
@@ -53,6 +80,12 @@ export function AdminDashboard() {
           console.error('Error fetching installers:', installersResult.error);
         } else {
           setInstallers(installersResult.data || []);
+        }
+
+        if (measuresResult.error) {
+          console.error('Error fetching measures:', measuresResult.error);
+        } else {
+          setMeasures(measuresResult.data || []);
         }
       } catch (error) {
         clearTimeout(timeoutId);
@@ -175,6 +208,55 @@ export function AdminDashboard() {
           </div>
         </div>
       </div>
+
+      {measures.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200/60 shadow-lg overflow-hidden">
+          <div className="p-6 border-b border-gray-200/60 bg-gradient-to-r from-gray-50 to-white">
+            <h3 className="text-lg font-bold text-gray-900">Active Measures</h3>
+            <p className="text-sm text-gray-600 mt-1">Measure types enabled for your organisation</p>
+          </div>
+          <div className="p-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {measures.map((orgMeasure) => {
+                const measure = orgMeasure.measure_types;
+                const Icon = iconMap[measure.icon_name] || Square;
+
+                return (
+                  <div
+                    key={orgMeasure.id}
+                    className="relative p-4 rounded-xl border-2 border-gray-200/60 bg-gradient-to-br from-gray-50 to-white hover:shadow-lg transition-all group"
+                  >
+                    {orgMeasure.is_primary && (
+                      <div className="absolute top-2 right-2">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold bg-electric-500 text-white rounded-full shadow-sm">
+                          <CheckCircle className="w-3 h-3" />
+                          Primary
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex items-start gap-3 mb-3">
+                      <div className="p-2.5 bg-electric-50 rounded-lg group-hover:bg-electric-100 transition-colors">
+                        <Icon className="w-5 h-5 text-electric-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-semibold text-gray-900 text-sm leading-tight">
+                          {measure.name}
+                        </h4>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          Added {new Date(orgMeasure.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-600 leading-relaxed">
+                      {measure.description}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-xl border border-gray-200/60 shadow-lg overflow-hidden">

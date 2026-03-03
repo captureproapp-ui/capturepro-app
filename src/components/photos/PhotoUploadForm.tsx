@@ -3,6 +3,7 @@ import { supabase, PhotoType } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { X, Upload, Image as ImageIcon, MapPin, AlertCircle, Camera } from 'lucide-react';
 import { convertMultipleImages } from '../../utils/imageConversion';
+import { extractEXIFData, getBrowserLocation } from '../../utils/geolocation';
 
 type EvidenceTemplate = {
   id: string;
@@ -109,45 +110,28 @@ export function PhotoUploadForm({ openingId, onClose, onSuccess }: PhotoUploadFo
     fetchPropertyIdAndTemplates();
   }, [openingId]);
 
-  const getLocationFromBrowser = (): Promise<{ gps_lat: number; gps_lng: number; gps_accuracy: number }> => {
-    return new Promise((resolve, reject) => {
-      if (!navigator.geolocation) {
+  const getLocationFromBrowser = async () => {
+    try {
+      const location = await getBrowserLocation();
+      setLocationStatus('granted');
+      setLocationError(null);
+      return location;
+    } catch (error: any) {
+      if (error?.code === 1) {
+        setLocationStatus('denied');
+        setLocationError('Location permission denied. Please enable location access in your browser settings.');
+      } else if (error?.code === 2) {
+        setLocationStatus('unavailable');
+        setLocationError('Location unavailable. Please check your device settings.');
+      } else if (error?.code === 3) {
+        setLocationStatus('unavailable');
+        setLocationError('Location request timed out. Please try again.');
+      } else if (error?.message === 'Geolocation not supported') {
         setLocationStatus('unavailable');
         setLocationError('Geolocation not supported by your browser');
-        reject(new Error('Geolocation not supported'));
-        return;
       }
-
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setLocationStatus('granted');
-          setLocationError(null);
-          resolve({
-            gps_lat: position.coords.latitude,
-            gps_lng: position.coords.longitude,
-            gps_accuracy: position.coords.accuracy,
-          });
-        },
-        (error) => {
-          if (error.code === error.PERMISSION_DENIED) {
-            setLocationStatus('denied');
-            setLocationError('Location permission denied. Please enable location access in your browser settings.');
-          } else if (error.code === error.POSITION_UNAVAILABLE) {
-            setLocationStatus('unavailable');
-            setLocationError('Location unavailable. Please check your device settings.');
-          } else if (error.code === error.TIMEOUT) {
-            setLocationStatus('unavailable');
-            setLocationError('Location request timed out. Please try again.');
-          }
-          reject(error);
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0,
-        }
-      );
-    });
+      throw error;
+    }
   };
 
   const handleManualLocationRequest = async () => {
@@ -158,20 +142,6 @@ export function PhotoUploadForm({ openingId, onClose, onSuccess }: PhotoUploadFo
       console.warn('Could not get location:', error);
     }
     setGettingLocation(false);
-  };
-
-  const extractEXIFData = async (file: File): Promise<{ gps_lat: number | null; gps_lng: number | null; capturedAt: string }> => {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        resolve({
-          gps_lat: null,
-          gps_lng: null,
-          capturedAt: new Date().toISOString(),
-        });
-      };
-      reader.readAsArrayBuffer(file);
-    });
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -198,8 +168,9 @@ export function PhotoUploadForm({ openingId, onClose, onSuccess }: PhotoUploadFo
       });
 
       const newPhotos = await Promise.all(
-        conversionResults.map(async (result) => {
-          const exifData = await extractEXIFData(result.file);
+        conversionResults.map(async (result, index) => {
+          const originalFile = files[index];
+          const exifData = await extractEXIFData(originalFile);
 
           const photoFile = {
             file: result.file,
@@ -212,7 +183,6 @@ export function PhotoUploadForm({ openingId, onClose, onSuccess }: PhotoUploadFo
             templateId: null,
           };
 
-          console.log('Created photo file:', { name: result.file.name, photoType: photoFile.photoType, wasConverted: result.wasConverted });
           return photoFile;
         })
       );
