@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase, Property } from '../../lib/supabase';
 import { ArrowLeft, Upload, CheckCircle, AlertCircle, Camera, X, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { LocationBadge } from '../ui/LocationBadge';
+import { OutOfOrderWarning } from '../ui/OutOfOrderWarning';
 import { convertImageIfNeeded } from '../../utils/imageConversion';
 import { extractEXIFData, getBrowserLocation } from '../../utils/geolocation';
 
@@ -46,6 +47,9 @@ export function PropertyElevationsChecklist({
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [showLightbox, setShowLightbox] = useState(false);
   const [error, setError] = useState<string>('');
+  const [showOutOfOrderWarning, setShowOutOfOrderWarning] = useState(false);
+  const [pendingUploadTemplateId, setPendingUploadTemplateId] = useState<string | null>(null);
+  const [outOfOrderData, setOutOfOrderData] = useState<{ stageWarning: string | null; skippedItems: string[]; targetTitle: string }>({ stageWarning: null, skippedItems: [], targetTitle: '' });
 
   useEffect(() => {
     fetchData();
@@ -122,7 +126,34 @@ export function PropertyElevationsChecklist({
     setLoading(false);
   };
 
-  const handlePhotoUpload = async (templateId: string) => {
+  const STAGE_ORDER = ['pre', 'post'];
+  const STAGE_LABELS: Record<string, string> = { pre: 'Pre-Installation Elevations', post: 'Post-Installation Elevations' };
+
+  const checkUploadOrder = (templateId: string): { hasWarning: boolean; stageWarning: string | null; skippedItems: string[] } => {
+    const target = requirements.find((r) => r.template_id === templateId);
+    if (!target) return { hasWarning: false, stageWarning: null, skippedItems: [] };
+
+    const isReqComplete = (r: ElevationRequirement) => r.satisfied_qty >= r.required_qty;
+
+    let stageWarning: string | null = null;
+    const targetStageIndex = STAGE_ORDER.indexOf(target.stage);
+    for (let i = 0; i < targetStageIndex; i++) {
+      const priorStage = STAGE_ORDER[i];
+      const priorItems = requirements.filter((r) => r.stage === priorStage && r.is_applicable);
+      const incomplete = priorItems.filter((r) => !isReqComplete(r));
+      if (incomplete.length > 0) {
+        stageWarning = `${STAGE_LABELS[priorStage]} still has ${incomplete.length} incomplete item${incomplete.length !== 1 ? 's' : ''}.`;
+        break;
+      }
+    }
+
+    const sameStageItems = requirements.filter((r) => r.stage === target.stage && r.is_applicable && r.sort_order < target.sort_order);
+    const skippedItems = sameStageItems.filter((r) => !isReqComplete(r)).map((r) => r.title);
+
+    return { hasWarning: !!stageWarning || skippedItems.length > 0, stageWarning, skippedItems };
+  };
+
+  const triggerFileUpload = (templateId: string) => {
     setUploading(templateId);
     setError('');
 
@@ -152,7 +183,7 @@ export function PropertyElevationsChecklist({
         const processedFile = conversionResult.file;
 
         const fileName = `${propertyId}/elevations/${Date.now()}_${processedFile.name}`;
-        const { data: uploadData, error: uploadError } = await supabase.storage
+        const { error: uploadError } = await supabase.storage
           .from('photos')
           .upload(fileName, processedFile);
 
@@ -196,6 +227,26 @@ export function PropertyElevationsChecklist({
     };
 
     fileInput.click();
+  };
+
+  const handleConfirmOutOfOrder = () => {
+    setShowOutOfOrderWarning(false);
+    if (pendingUploadTemplateId) {
+      triggerFileUpload(pendingUploadTemplateId);
+      setPendingUploadTemplateId(null);
+    }
+  };
+
+  const handlePhotoUpload = (templateId: string) => {
+    const { hasWarning, stageWarning, skippedItems } = checkUploadOrder(templateId);
+    if (hasWarning) {
+      const target = requirements.find((r) => r.template_id === templateId);
+      setOutOfOrderData({ stageWarning, skippedItems, targetTitle: target?.title || '' });
+      setPendingUploadTemplateId(templateId);
+      setShowOutOfOrderWarning(true);
+      return;
+    }
+    triggerFileUpload(templateId);
   };
 
   const handleViewPhoto = (photos: Photo[], index: number) => {
@@ -396,6 +447,15 @@ export function PropertyElevationsChecklist({
           </div>
         )}
       </div>
+
+      <OutOfOrderWarning
+        isOpen={showOutOfOrderWarning}
+        targetItemTitle={outOfOrderData.targetTitle}
+        stageWarning={outOfOrderData.stageWarning}
+        skippedItems={outOfOrderData.skippedItems}
+        onConfirm={handleConfirmOutOfOrder}
+        onCancel={() => { setShowOutOfOrderWarning(false); setPendingUploadTemplateId(null); }}
+      />
 
       {showLightbox && lightboxPhotos.length > 0 && (
         <div

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { ArrowLeft, Camera, CheckCircle, AlertCircle, Upload, X, XCircle, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { LocationBadge } from '../ui/LocationBadge';
+import { OutOfOrderWarning } from '../ui/OutOfOrderWarning';
 import { convertImageIfNeeded } from '../../utils/imageConversion';
 import { extractEXIFData, getBrowserLocation } from '../../utils/geolocation';
 
@@ -57,6 +58,9 @@ export function OpeningChecklist({ openingId, onBack }: OpeningChecklistProps) {
   const [lightboxPhotos, setLightboxPhotos] = useState<Photo[]>([]);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [showLightbox, setShowLightbox] = useState(false);
+  const [showOutOfOrderWarning, setShowOutOfOrderWarning] = useState(false);
+  const [pendingUploadTemplateId, setPendingUploadTemplateId] = useState<string | null>(null);
+  const [outOfOrderData, setOutOfOrderData] = useState<{ stageWarning: string | null; skippedItems: string[]; targetTitle: string }>({ stageWarning: null, skippedItems: [], targetTitle: '' });
 
   useEffect(() => {
     fetchData();
@@ -213,7 +217,34 @@ export function OpeningChecklist({ openingId, onBack }: OpeningChecklistProps) {
     }
   };
 
-  const handlePhotoUpload = async (templateId: string) => {
+  const STAGE_ORDER = ['pre', 'during', 'post'];
+  const STAGE_LABELS: Record<string, string> = { pre: 'Pre-Installation', during: 'During Installation', post: 'Post-Installation' };
+
+  const checkUploadOrder = (templateId: string): { hasWarning: boolean; stageWarning: string | null; skippedItems: string[] } => {
+    const target = requirements.find((r) => r.template_id === templateId);
+    if (!target) return { hasWarning: false, stageWarning: null, skippedItems: [] };
+
+    const isReqComplete = (r: EvidenceRequirement) => r.satisfied_qty >= r.required_qty || r.marked_not_available;
+
+    let stageWarning: string | null = null;
+    const targetStageIndex = STAGE_ORDER.indexOf(target.stage);
+    for (let i = 0; i < targetStageIndex; i++) {
+      const priorStage = STAGE_ORDER[i];
+      const priorItems = requirements.filter((r) => r.stage === priorStage);
+      const incomplete = priorItems.filter((r) => !isReqComplete(r));
+      if (incomplete.length > 0) {
+        stageWarning = `${STAGE_LABELS[priorStage]} still has ${incomplete.length} incomplete item${incomplete.length !== 1 ? 's' : ''}.`;
+        break;
+      }
+    }
+
+    const sameStageItems = requirements.filter((r) => r.stage === target.stage && r.sort_order < target.sort_order);
+    const skippedItems = sameStageItems.filter((r) => !isReqComplete(r)).map((r) => r.title);
+
+    return { hasWarning: !!stageWarning || skippedItems.length > 0, stageWarning, skippedItems };
+  };
+
+  const triggerFileUpload = (templateId: string) => {
     setUploading(templateId);
     setError('');
 
@@ -288,6 +319,26 @@ export function OpeningChecklist({ openingId, onBack }: OpeningChecklistProps) {
     };
 
     fileInput.click();
+  };
+
+  const handleConfirmOutOfOrder = () => {
+    setShowOutOfOrderWarning(false);
+    if (pendingUploadTemplateId) {
+      triggerFileUpload(pendingUploadTemplateId);
+      setPendingUploadTemplateId(null);
+    }
+  };
+
+  const handlePhotoUpload = (templateId: string) => {
+    const { hasWarning, stageWarning, skippedItems } = checkUploadOrder(templateId);
+    if (hasWarning) {
+      const target = requirements.find((r) => r.template_id === templateId);
+      setOutOfOrderData({ stageWarning, skippedItems, targetTitle: target?.title || '' });
+      setPendingUploadTemplateId(templateId);
+      setShowOutOfOrderWarning(true);
+      return;
+    }
+    triggerFileUpload(templateId);
   };
 
   const handleViewPhoto = (photos: Photo[], index: number) => {
@@ -550,6 +601,15 @@ export function OpeningChecklist({ openingId, onBack }: OpeningChecklistProps) {
           </div>
         </div>
       </div>
+
+      <OutOfOrderWarning
+        isOpen={showOutOfOrderWarning}
+        targetItemTitle={outOfOrderData.targetTitle}
+        stageWarning={outOfOrderData.stageWarning}
+        skippedItems={outOfOrderData.skippedItems}
+        onConfirm={handleConfirmOutOfOrder}
+        onCancel={() => { setShowOutOfOrderWarning(false); setPendingUploadTemplateId(null); }}
+      />
 
       {showNAModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
